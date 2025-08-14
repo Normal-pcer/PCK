@@ -1,0 +1,9 @@
+{
+    "cmake.generator": "MinGW Makefiles",
+    "cmake.configureSettings": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+    },
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "C_Cpp.default.compilerPath": "C:/mingw64/bin/g++.exe"
+}
