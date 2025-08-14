@@ -14,7 +14,7 @@ namespace ranges = std::ranges;
 namespace views = std::views;
 
 
-namespace Solution_6314180276493067 {
+namespace Solution {
     namespace Example {
         bool _;
         namespace NamespaceInClass {
@@ -663,6 +663,6 @@ auto main() -> int {
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr), std::cout.tie(nullptr);
 
-    Solution_6314180276493067::solve();
+    Solution::solve();
     return 0;
 }
