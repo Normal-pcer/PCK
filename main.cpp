@@ -1,189 +1,18 @@
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
-#include <cstring>
 #include <deque>
 #include <iostream>
 #include <ranges>
-#include <string>
 #include <utility>
 #include <vector>
 
-bool DEBUG_MODE = false;
-#define debug if (DEBUG_MODE)
-#define never if constexpr (false)
-template <typename T> inline auto chkMax(T &base, const T &cmp) -> T & { return (base = std::max(base, cmp)); }
-template <typename T> inline auto chkMin(T &base, const T &cmp) -> T & { return (base = std::min(base, cmp)); }
-#define _lambda_1(expr) [&]() { return expr; }
-#define _lambda_2(a, expr) [&](auto a) { return expr; }
-#define _lambda_3(a, b, expr) [&](auto a, auto b) { return expr; }
-#define _lambda_4(a, b, c, expr) [&](auto a, auto b, auto c) { return expr; }
-#define _lambda_overload(a, b, c, d, e, ...) _lambda_##e
-#define lambda(...) _lambda_overload(__VA_ARGS__, 4, 3, 2, 1)(__VA_ARGS__)
-#define lam lambda
-namespace lib {
-#if __cplusplus > 201703LL
-    namespace ranges = std::ranges;
-    namespace views = std::views;
-#endif
-}
-char constexpr endl = '\n';
-using namespace lib;
-using i16 = std::int16_t; using i32 = std::int32_t; using i64 = std::int64_t;
-using u16 = std::uint16_t; using u32 = std::uint32_t; using u64 = std::uint64_t; using uz = std::size_t;
+#include "util.hpp"
+#include "panic.hpp"
+#include "concat_view.hpp"
 
-using i8 = std::int8_t; using u8 = std::uint8_t;
-using namespace lib;
+namespace ranges = std::ranges;
+namespace views = std::views;
 
-#define PANIC(msg) assert(!(msg)), assert(false), __builtin_unreachable()
-
-// 简易实现 C++26 concat_view
-namespace my_views {
-
-    template <std::ranges::input_range Range1, std::ranges::input_range Range2>
-    class concat_view : public std::ranges::view_interface<concat_view<Range1, Range2>> {
-    private:
-        Range1 range1_;
-        Range2 range2_;
-
-        using iterator1 = std::ranges::iterator_t<Range1>;
-        using sentinel1 = std::ranges::sentinel_t<Range1>;
-        using iterator2 = std::ranges::iterator_t<Range2>;
-        using sentinel2 = std::ranges::sentinel_t<Range2>;
-
-        class iterator;
-
-        struct sentinel {
-            sentinel2 end2;
-        };
-
-    public:
-        concat_view() = default;
-        concat_view(Range1 r1, Range2 r2) 
-            : range1_(std::move(r1)), range2_(std::move(r2)) {}
-
-        auto begin() {
-            return iterator(
-                std::ranges::begin(range1_),
-                std::ranges::end(range1_),
-                std::ranges::begin(range2_),
-                std::ranges::end(range2_)
-            );
-        }
-
-        auto end() {
-            return sentinel{ std::ranges::end(range2_) };
-        }
-    };
-
-    template <std::ranges::input_range Range1, std::ranges::input_range Range2>
-    class concat_view<Range1, Range2>::iterator {
-    public:
-        using iterator_category = std::input_iterator_tag;
-        using value_type = std::common_type_t<
-            typename std::iterator_traits<iterator1>::value_type,
-            typename std::iterator_traits<iterator2>::value_type
-        >;
-        using difference_type = std::common_type_t<
-            typename std::iterator_traits<iterator1>::difference_type,
-            typename std::iterator_traits<iterator2>::difference_type
-        >;
-        using reference = std::common_reference_t<
-            typename std::iterator_traits<iterator1>::reference,
-            typename std::iterator_traits<iterator2>::reference
-        >;
-
-    private:
-        enum class state: std::uint8_t { first, second, end };
-        state current_state_ = state::end;
-
-        iterator1 it1_;
-        sentinel1 end1_;
-        iterator2 it2_;
-        sentinel2 end2_;
-
-    public:
-        iterator() = default;
-
-        iterator(iterator1 it1, sentinel1 end1, iterator2 it2, sentinel2 end2)
-            : it1_(std::move(it1)), end1_(std::move(end1))
-            , it2_(std::move(it2)), end2_(std::move(end2))
-        {
-            if (it1_ != end1_) {
-                current_state_ = state::first;
-            } else if (it2_ != end2_) {
-                current_state_ = state::second;
-            } else {
-                current_state_ = state::end;
-            }
-        }
-
-        reference operator*() const {
-            if (current_state_ == state::first) {
-                return *it1_;
-            }
-            if (current_state_ == state::second) {
-                return *it2_;
-            }
-            throw std::logic_error("Dereferencing end iterator");
-        }
-
-        iterator& operator++() {
-            if (current_state_ == state::first) {
-                ++it1_;
-                if (it1_ == end1_) {
-                    if (it2_ != end2_) {
-                        current_state_ = state::second;
-                    } else {
-                        current_state_ = state::end;
-                    }
-                }
-            } else if (current_state_ == state::second) {
-                ++it2_;
-                if (it2_ == end2_) {
-                    current_state_ = state::end;
-                }
-            } else {
-                throw std::logic_error("Incrementing end iterator");
-            }
-            return *this;
-        }
-
-        iterator operator++(int) {
-            auto tmp = *this;
-            ++*this;
-            return tmp;
-        }
-
-        bool operator==(const iterator& other) const = default;
-
-        bool operator==(const sentinel& s) const {
-            return current_state_ == state::end || 
-                   (current_state_ == state::second && it2_ == s.end2);
-        }
-    };
-
-    template <typename Range1, typename Range2>
-    concat_view(Range1&& r1, Range2&& r2) -> concat_view<
-        std::views::all_t<Range1>, 
-        std::views::all_t<Range2>
-    >;
-
-}
-
-inline auto concat_view = [](auto&& range1, auto&& range2) {
-#if __cplusplus < 202600L
-        return my_views::concat_view(
-            std::forward<decltype(range1)>(range1),
-            std::forward<decltype(range2)>(range2)
-        );
-#else
-        return std::views::concat(
-            std::forward<decltype(range1)>(range1),
-            std::forward<decltype(range2)>(range2)
-        );
-#endif
-};
 
 namespace Solution_6314180276493067 {
     namespace Example {
@@ -423,7 +252,7 @@ namespace Solution_6314180276493067 {
         friend struct Designant;
 
         auto damaged(i32 amount, DamageType type, Player &source, Game &game) -> void;
-        auto flatterImpression() const -> PlayerRole;
+        auto camp() const -> PlayerRole;
         auto play(Game &game) -> void;
     };
 
@@ -582,7 +411,7 @@ namespace Solution_6314180276493067 {
         bool strong = (type >= DamageType::Dueling);  // 本次攻击为表敌意
         if (strong) {
             // 获取表敌意之后的印象，如果不是 undefined 就应用
-            chkMax(source.impression, -flatterImpression());
+            chkMax(source.impression, -camp());
         }
 
         // 额外奖惩机制
@@ -597,10 +426,10 @@ namespace Solution_6314180276493067 {
             }
         }
     }
-    // 判断对当前玩家献殷勤属于跳忠还是跳反。
+    // 判断玩家阵营，对当前玩家献殷勤属于跳忠还是跳反。
     // 即：对当前玩家献殷勤之后，会让自己的 impression 变成什么。
     // 如果要判断表敌意，对结果取反即可。
-    auto Player::flatterImpression() const -> PlayerRole {
+    auto Player::camp() const -> PlayerRole {
         // 跳忠：对主猪/跳忠的忠猪献殷勤
         if (role == PlayerRole::M_Main or impression == PlayerRole::Z_Minister) {
             return PlayerRole::Z_Minister;
@@ -830,8 +659,7 @@ namespace Solution_6314180276493067 {
     }
 }
 
-auto main(int argc, char const *argv[]) -> int {
-    DEBUG_MODE = (argc != 1) and (std::strcmp("-d", argv[1]) == 0);
+auto main() -> int {
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr), std::cout.tie(nullptr);
 
