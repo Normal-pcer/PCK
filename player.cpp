@@ -1,6 +1,3 @@
-#ifndef PLAYER_IMPL_HEADER
-#define PLAYER_IMPL_HEADER
-
 #include "util.hpp"
 #include "game.hpp"
 #include "player.hpp"
@@ -8,13 +5,13 @@
 namespace PCK {
 // 抽 n 张卡。
 // 可能修改：cards。
-auto inline Player::CardManager::draw(Game &game, i32 n) -> void {
+auto Player::CardManager::draw(Game &game, i32 n) -> void {
     for (i32 i = 0; i < n; ++i) {
         cards.push_back(game.drawCard());
     }
 }
 // 寻找一张指定标签的卡。
-auto inline Player::CardManager::findCard(CardLabel label) -> CardList::iterator {
+auto Player::CardManager::findCard(CardLabel label) -> CardList::iterator {
     return ranges::find(cards, label, lam(x, x.getLabel()));
 }
 // 寻找指定标签的卡牌，然后：
@@ -22,7 +19,7 @@ auto inline Player::CardManager::findCard(CardLabel label) -> CardList::iterator
 // - 如果不存在，返回 false
 // 可能修改 cards。
 template <typename ...Ts>
-auto inline Player::CardManager::useCard(CardLabel label, Ts &&...args) -> bool {
+auto Player::CardManager::useCard(CardLabel label, Ts &&...args) -> bool {
     auto it = findCard(label);
     if (it != cards.end()) {
         // 预先复制，避免在 *it 上同时读写
@@ -38,7 +35,7 @@ auto inline Player::CardManager::useCard(CardLabel label, Ts &&...args) -> bool 
 // 同时会进行跳反、跳忠等处理，以及后续奖惩逻辑。
 // 如果游戏结束，直接抛出异常报告。
 // 可能修改：user 和 target 的 cards。
-auto inline Player::damaged(i32 amount, DamageType type, Player &source, Game &game) -> void {
+auto Player::damaged(i32 amount, DamageType type, Player &source, Game &game) -> void {
     health -= amount;
 
     // 尝试吃桃免伤
@@ -92,7 +89,7 @@ auto inline Player::damaged(i32 amount, DamageType type, Player &source, Game &g
 // 判断玩家阵营，对当前玩家献殷勤属于跳忠还是跳反。
 // 即：对当前玩家献殷勤之后，会让自己的 impression 变成什么。
 // 如果要判断表敌意，对结果取反即可。
-auto inline Player::camp() const -> PlayerRole {
+auto Player::camp() const -> PlayerRole {
     // 跳忠：对主猪/跳忠的忠猪献殷勤
     if (role == PlayerRole::M_Main or impression == PlayerRole::Z_Minister) {
         return PlayerRole::Z_Minister;
@@ -104,7 +101,7 @@ auto inline Player::camp() const -> PlayerRole {
     return PlayerRole::Undefined;
 }
 // 开始该玩家的回合
-auto inline Player::play(Game &game) -> void {
+auto Player::play(Game &game) -> void {
     // 摸牌阶段
     cardManager.draw(game, 2);
 
@@ -138,7 +135,7 @@ auto inline Player::play(Game &game) -> void {
     }
 }
 
-auto inline Player::Designant::resolveKill(Card card, Game &game) const -> Decision {
+auto Player::Designant::resolveKill(Card card, Game &game) const -> Decision {
     if (card.getLabel() != CardLabel::K_Killing) return {};
     // 后面的第一个玩家
     auto &target = *game.getPlayersFrom(*super).begin();
@@ -148,7 +145,7 @@ auto inline Player::Designant::resolveKill(Card card, Game &game) const -> Decis
     return {Decision::Skip};
 }
 
-auto inline Player::Designant::resolveDuel(Card card, Game &game) const -> Decision {
+auto Player::Designant::resolveDuel(Card card, Game &game) const -> Decision {
     if (card.getLabel() != CardLabel::F_Dueling) return {};
     auto *target = selectTarget(game);
 
@@ -158,7 +155,7 @@ auto inline Player::Designant::resolveDuel(Card card, Game &game) const -> Decis
     return {Decision::Use, target};
 }
 
-auto inline Player::Designant::selectTarget(Game &game) const -> Player * {
+auto Player::Designant::selectTarget(Game &game) const -> Player * {
     auto getFirst = [&](auto &&pred) -> Player * {
         for (auto &pl: game.getPlayersFrom(*super)) {
             if (pred(pl.impression)) return &pl;
@@ -176,10 +173,8 @@ auto inline Player::Designant::selectTarget(Game &game) const -> Player * {
     return getFirst(lam(x, canProvoke(x)));
 }
 
-auto inline Player::Designant::responseDuel(Player &source) const -> bool {
+auto Player::Designant::responseDuel(Player &source) const -> bool {
     // 仅有“忠猪不打主猪”一条例外，否则都会尽力决斗
     return super->role != PlayerRole::Z_Minister or source.role != PlayerRole::M_Main;
 }
 }
-
-#endif

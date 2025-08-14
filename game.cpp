@@ -1,26 +1,23 @@
-#ifndef GAME_IMPL_HEADER
-#define GAME_IMPL_HEADER
-
 #include "util.hpp"
 #include "game.hpp"
 #include "player.hpp"
 
 namespace PCK {
-auto inline Game::drawCard() -> Card {
+auto Game::drawCard() -> Card {
     auto card = deck.front();
     if (deck.size() > 1) deck.pop_front();
 
     return card;
 }
 
-auto inline Game::round() -> void {
+auto Game::round() -> void {
     for (auto &pl: players) {
         if (not pl.alive) continue;
         pl.play(*this);
     }
 }
 
-auto inline Game::print() -> void {
+auto Game::print() -> void {
     for (auto &pl: players) {
         if (pl.alive) {
             for (auto &c: pl.cardManager.cards) {
@@ -36,7 +33,7 @@ auto inline Game::print() -> void {
 // 尝试通过无懈可击，阻止一张锦囊牌。
 // 返回是否阻止成功。
 // source 向 target 使用了一张锦囊牌，friendly 标识这个操作是向 target 献殷勤还是表敌意。
-auto inline Game::blockTrick(Player &source, Player &target, bool friendly) -> bool {
+auto Game::blockTrick(Player &source, Player &target, bool friendly) -> bool {
     // 如果没有亮身份，一定无法被无懈可击阻止
     if (target.impression < leastShowedRole) {
         return false;
@@ -58,4 +55,3 @@ auto inline Game::blockTrick(Player &source, Player &target, bool friendly) -> b
     return false;
 }
 }
-#endif

@@ -1,6 +1,3 @@
-#ifndef CARD_IMPL_HEADER
-#define CARD_IMPL_HEADER
-
 #include <iostream>
 #include <cassert>
 
@@ -12,30 +9,30 @@
 namespace PCK {
 // 所有卡牌的实现
 namespace CardImpl {
-    auto inline test() -> void {
+    auto test() -> void {
         std::cout << "TestCard execute" << endl;
     }
     // 可能修改 user 和 target 的 cards。
-    auto inline killing(Player &user, Player &target, Game &game) -> void {
+    auto killing(Player &user, Player &target, Game &game) -> void {
         // 对方先尝试使用闪
         if (not target.cardManager.useCard(CardLabel::D_Dodge)) {
             // 闪不开，只能掉血
             target.damaged(1, DamageType::Killing, user, game);
         }
     }
-    auto inline peach(Player &user) -> void {
+    auto peach(Player &user) -> void {
         assert(user.health != user.maxHealth);
         ++user.health;
     }
-    auto inline dodge() -> void {
+    auto dodge() -> void {
         // “闪”没有效果
     }
-    auto inline crossbow(Player &user) -> void {
+    auto crossbow(Player &user) -> void {
         user.weapon = true;
     }
     // 类似南猪入侵的两类牌
     // 对除了自己以外的所有人，只有丢弃一张 type 才能免伤
-    auto inline invasionLike(Player &user, Game &game, CardLabel type) -> void {
+    auto invasionLike(Player &user, Game &game, CardLabel type) -> void {
         auto targets = game.getPlayersFrom(user);
         for (auto &target: targets) {
             // 可以被无懈可击阻止
@@ -50,16 +47,16 @@ namespace CardImpl {
             }
         }
     }
-    auto inline invasion(Player &user, Game &game) -> void {
+    auto invasion(Player &user, Game &game) -> void {
         invasionLike(user, game, CardLabel::K_Killing);
     }
-    auto inline arrows(Player &user, Game &game) -> void {
+    auto arrows(Player &user, Game &game) -> void {
         invasionLike(user, game, CardLabel::D_Dodge);
     }
-    auto inline unbreakable() -> void {
+    auto unbreakable() -> void {
         // “无懈可击”不应主动调用，被动调用时无效果
     }
-    auto inline duel(Player &user, Player &target, Game &game) -> void {
+    auto duel(Player &user, Player &target, Game &game) -> void {
         // 二者轮流弃置杀，直到一方弃置失败。
         // 失败的一方受到伤害。
 
@@ -94,7 +91,7 @@ namespace CardImpl {
         recur(recur, target, user);
     }
 }
-auto inline Card::execute(Player &user, Player *target, Game *game) -> void {
+auto Card::execute(Player &user, Player *target, Game *game) -> void {
     // 使用传统的 switch-case 转发
     using namespace CardImpl;
     switch (label) {
@@ -111,5 +108,3 @@ auto inline Card::execute(Player &user, Player *target, Game *game) -> void {
     }
 }
 }
-
-#endif

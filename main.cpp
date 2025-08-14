@@ -5,10 +5,9 @@
 #include <vector>
 
 #include "util.hpp"
-
-#include "card_impl.hpp"
-#include "player_impl.hpp"
-#include "game_impl.hpp"
+#include "card.hpp"
+#include "game.hpp"
+#include "player.hpp"
 
 namespace PCK {
 auto solve() -> void {

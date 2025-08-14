@@ -4,4 +4,4 @@ project(PCK)          # 项目名称
 
 set(CMAKE_CXX_STANDARD 26)
 
-add_executable(my_program main.cpp)
+add_executable(main main.cpp player.cpp game.cpp card.cpp)
