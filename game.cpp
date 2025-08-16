@@ -1,3 +1,4 @@
+#include "enums.hpp"
 #include "util.hpp"
 #include "game.hpp"
 #include "player.hpp"
@@ -14,6 +15,9 @@ auto Game::round() -> void {
     for (auto &pl: players) {
         if (not pl.alive) continue;
         pl.play(*this);
+
+        std::cout << std::format("after Player {}\n", pl.id);
+        print();
     }
 }
 
@@ -41,11 +45,10 @@ auto Game::blockTrick(Player &source, Player &target, bool friendly) -> bool {
 
     // 按顺序，所有人都有机会使用一次无懈可击
     for (auto &pl: getPlayersFrom(source, true)) {
-        auto flag = (
-            (friendly and pl.designant.canProvoke(target.impression)) or
-            (not friendly and pl.designant.canFlatter(target.impression))
-        );  // 可以执行无懈可击
-        if (flag and pl.cardManager.useCard(CardLabel::J_Unbreakable)) {
+        auto res = pl.designant->inBlockingTrick(source, target, *this, friendly);
+        if (auto *p = res.get_if<IDesignant::Result::UseCard>();
+                p != nullptr and p->iter->getLabel() == CardLabel::J_Unbreakable) {
+            pl.cardManager.erase(p->iter);
             pl.impression = pl.role;
             // 这次无懈可击本身没有被无效化
             return not blockTrick(pl, target, not friendly);

@@ -12,13 +12,18 @@ namespace CardImpl {
     auto test() -> void {
         std::cout << "TestCard execute" << endl;
     }
-    // 可能修改 user 和 target 的 cards。
     auto killing(Player &user, Player &target, Game &game) -> void {
-        // 对方先尝试使用闪
-        if (not target.cardManager.useCard(CardLabel::D_Dodge)) {
-            // 闪不开，只能掉血
-            target.damaged(1, DamageType::Killing, user, game);
+        auto res = target.designant->inKilling(user, game);
+        if (auto *p = res.get_if<IDesignant::Result::UseCard>()) {
+            auto it = p->iter;
+
+            if (it->getLabel() == CardLabel::D_Dodge) {
+                user.cardManager.erase(it);
+                return;
+            }
         }
+        // 闪不开，只能掉血
+        target.damaged(1, DamageType::Killing, user, game);
     }
     auto peach(Player &user) -> void {
         assert(user.health != user.maxHealth);
@@ -32,26 +37,26 @@ namespace CardImpl {
     }
     // 类似南猪入侵的两类牌
     // 对除了自己以外的所有人，只有丢弃一张 type 才能免伤
-    auto invasionLike(Player &user, Game &game, CardLabel type) -> void {
+    auto aoeAttack(Player &user, Game &game, CardLabel type) -> void {
         auto targets = game.getPlayersFrom(user);
         for (auto &target: targets) {
             // 可以被无懈可击阻止
             if (game.blockTrick(user, target, false)) continue;
             // 弃置一张指定牌，或者生命值 -1
-            auto &cards = target.cardManager.cards;
-            auto it = target.cardManager.findCard(type);
-            if (it != cards.end()) {
-                cards.erase(it);
+            auto res = target.designant->inAoe(user, game, type);
+            if (auto *p = res.get_if<IDesignant::Result::UseCard>(); 
+                    p != nullptr and p->iter->getLabel() == type) {
+                user.cardManager.erase(p->iter);
             } else {
                 target.damaged(1, DamageType::Invading, user, game);
             }
         }
     }
     auto invasion(Player &user, Game &game) -> void {
-        invasionLike(user, game, CardLabel::K_Killing);
+        aoeAttack(user, game, CardLabel::K_Killing);
     }
     auto arrows(Player &user, Game &game) -> void {
-        invasionLike(user, game, CardLabel::D_Dodge);
+        aoeAttack(user, game, CardLabel::D_Dodge);
     }
     auto unbreakable() -> void {
         // “无懈可击”不应主动调用，被动调用时无效果
@@ -72,7 +77,7 @@ namespace CardImpl {
         auto recur = [&](auto &&recur, Player &cur, Player &oppo) -> void {
             // 轮到 cur 出牌
             // 如果 ta 想要出牌，并且手里有牌
-            if (cur.designant.responseDuel(oppo)) {
+            if (cur.designant->responseDuel(oppo)) {
                 // 选择一张杀
                 auto &cards = cur.cardManager.cards;
                 auto it = cur.cardManager.findCard(CardLabel::K_Killing);

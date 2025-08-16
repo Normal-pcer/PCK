@@ -1,3 +1,4 @@
+#include "enums.hpp"
 #include "util.hpp"
 #include "game.hpp"
 #include "player.hpp"
@@ -29,6 +30,9 @@ auto Player::CardManager::useCard(CardLabel label, Ts &&...args) -> bool {
         return true;
     }
     return false;
+}
+auto Player::CardManager::erase(Player::CardManager::CardList::iterator iter) -> void {
+    cards.erase(iter);
 }
 
 // 玩家受到伤害。
@@ -111,22 +115,19 @@ auto Player::play(Game &game) -> void {
 
     // 选定并使用一张卡牌，返回过程是否成功
     auto select = [&]() -> bool {
-        auto &cards = cardManager.cards;
-        for (auto it = cards.begin(); it != cards.end(); ++it) {
-            // 判断是否可用
-            if (auto res = designant.tryCard(*it, game); res.use()) {
-                if (it->getLabel() == CardLabel::K_Killing) {
-                    if (usedKilling and not weapon) continue;  // 没有武器，只能“杀”一次
-                    usedKilling = true;
-                }
-                auto copy = *it;
-                cards.erase(it);
-                copy.execute(*this, res.target, &game);
+        auto res = designant->selectCard(game, usedKilling);
 
+        using Result = IDesignant::Result;
+        return res.visit([&](auto &&x) {
+            if constexpr (std::same_as<Result::UseCard, decltype(x)>) {
+                auto copy = *x.it;
+                cardManager.cards.erase(x.it);
+                copy.execute(*this, x.target, &game);
                 return true;
+            } else {
+                return false;
             }
-        }
-        return false;
+        });
     };
 
     // 直到无法继续出牌
@@ -135,46 +136,161 @@ auto Player::play(Game &game) -> void {
     }
 }
 
-auto Player::Designant::resolveKill(Card card, Game &game) const -> Decision {
-    if (card.getLabel() != CardLabel::K_Killing) return {};
-    // 后面的第一个玩家
-    auto &target = *game.getPlayersFrom(*super).begin();
-    if (canProvoke(target.impression)) {
-        return {Decision::Use, &target};
-    }
-    return {Decision::Skip};
-}
+class DefaultDesignant: public IDesignant {
+    Player *player;
+public:
+    explicit DefaultDesignant(Player *super): player(super) {}
 
-auto Player::Designant::resolveDuel(Card card, Game &game) const -> Decision {
-    if (card.getLabel() != CardLabel::F_Dueling) return {};
-    auto *target = selectTarget(game);
-
-    if (target == nullptr) {
-        return {Decision::Skip};  // 无法决斗
-    }
-    return {Decision::Use, target};
-}
-
-auto Player::Designant::selectTarget(Game &game) const -> Player * {
-    auto getFirst = [&](auto &&pred) -> Player * {
-        for (auto &pl: game.getPlayersFrom(*super)) {
-            if (pred(pl.impression)) return &pl;
-        }
-        return nullptr;
+    struct Decision_ {
+        enum Type: i8 { Unresolved, Skip, Use } type = Unresolved;
+        Player* target = nullptr;
+        
+        bool resolved() const { return type != Unresolved; }
+        bool use() const { return type == Use; }
     };
-    if (super->role == PlayerRole::F_Thief) {
-        // 特殊处理反猪
-        if (auto *res = getFirst(lam(x, x == PlayerRole::M_Main)); res != nullptr)
-            return res;
-        if (auto *res = getFirst(lam(x, x == PlayerRole::F_Thief)); res != nullptr)
-            return res;
-        return nullptr;
-    }
-    return getFirst(lam(x, canProvoke(x)));
-}
 
-auto Player::Designant::responseDuel(Player &source) const -> bool {
-    // 仅有“忠猪不打主猪”一条例外，否则都会尽力决斗
-    return super->role != PlayerRole::Z_Minister or source.role != PlayerRole::M_Main;
+    auto direct(Card card, Game &) -> Decision_ {
+        switch (card.getLabel()) {
+        case CardLabel::J_Unbreakable: [[fallthrough]];
+        case CardLabel::D_Dodge:
+            return {Decision_::Skip};  // 一定不会主动使用
+        case CardLabel::N_Invasion: [[fallthrough]];
+        case CardLabel::W_Arrows: [[fallthrough]];
+        case CardLabel::Z_Crossbow:
+            return {Decision_::Use};
+        case CardLabel::P_Peach:
+            if (player->health < player->maxHealth) {
+                return {Decision_::Use};
+            } else {
+                return {Decision_::Skip};
+            }
+        default:
+            return {};
+        }
+    }
+
+    auto abandonFirst(CardLabel label) -> Result {
+        auto it = player->cardManager.findCard(label);
+        if (it == player->cardManager.cards.end()) {
+            return {};
+        }
+        return {Result::UseCard(it)};
+    }
+
+    auto resolveKill(Card card, Game &game) -> Decision_ {
+        if (card.getLabel() != CardLabel::K_Killing) return {};
+        // 后面的第一个玩家
+        auto &target = *game.getPlayersFrom(*player).begin();
+        if (canProvoke(target.impression)) {
+            return {Decision_::Use, &target};
+        }
+        return {Decision_::Skip};
+    }
+
+    auto resolveDuel(Card card, Game &game) -> Decision_ {
+        if (card.getLabel() != CardLabel::F_Dueling) return {};
+        auto *target = selectTarget(game);
+
+        if (target == nullptr) {
+            return {Decision_::Skip};  // 无法决斗
+        }
+        return {Decision_::Use, target};
+    }
+
+    // 是否可以向这个角色（impression）表敌意
+    auto canProvoke(PlayerRole role) -> bool override {
+        switch (player->role) {
+        case PlayerRole::M_Main:
+            return role == PlayerRole::F_Thief or role == PlayerRole::Questionable;
+        case PlayerRole::Z_Minister:
+            return role == PlayerRole::F_Thief;
+        case PlayerRole::F_Thief:
+            return role == PlayerRole::M_Main or role == PlayerRole::Z_Minister;
+        default:
+            PANIC("Invalid role");
+        }
+    }
+
+    // 是否可以向这个角色献殷勤
+    auto canFlatter(PlayerRole role) -> bool override {
+        switch (player->role) {
+        case PlayerRole::M_Main:
+            return role == PlayerRole::Z_Minister or role == PlayerRole::M_Main;
+        case PlayerRole::Z_Minister:
+            return role == PlayerRole::Z_Minister or role == PlayerRole::M_Main;
+        case PlayerRole::F_Thief:
+            return role == PlayerRole::F_Thief;
+        default:
+            PANIC("Invalid role");
+        }
+    }
+
+    auto selectTarget(Game &game) -> Player * {
+        auto getFirst = [&](auto &&pred) -> Player * {
+            for (auto &pl: game.getPlayersFrom(*player)) {
+                if (pred(pl.impression)) return &pl;
+            }
+            return nullptr;
+        };
+        if (player->role == PlayerRole::F_Thief) {
+            // 特殊处理反猪
+            if (auto *res = getFirst(lam(x, x == PlayerRole::M_Main)); res != nullptr)
+                return res;
+            if (auto *res = getFirst(lam(x, x == PlayerRole::F_Thief)); res != nullptr)
+                return res;
+            return nullptr;
+        }
+        return getFirst(lam(x, canProvoke(x)));
+    }
+
+    auto responseDuel(Player &source) -> bool override {
+        // 仅有“忠猪不打主猪”一条例外，否则都会尽力决斗
+        return player->role != PlayerRole::Z_Minister or source.role != PlayerRole::M_Main;
+    }
+
+
+    // 尝试使用一张牌。
+    // 使用与否，取决于操作者的意愿。即可以拒绝出牌。（例如忠猪不打主猪）
+    // 实际的出牌目标也由操作者决定。
+    // 返回值：是否成功使用牌。
+    auto tryCard(Card card, Game &game) -> Decision_ {
+        if (auto res = direct(card, game); res.resolved()) return res;
+        if (auto res = resolveKill(card, game); res.resolved()) return res;
+        if (auto res = resolveDuel(card, game); res.resolved()) return res;
+        PANIC("Cannot resolve card");
+    }
+
+    auto selectCard(Game &game, bool enableKilling) -> Result override {
+        auto &cards = player->cardManager.cards;
+        for (auto it = cards.begin(); it != cards.end(); ++it) {
+            // 判断是否可用
+            if (auto res = tryCard(*it, game); res.use()) {
+                if (it->getLabel() == CardLabel::K_Killing and not enableKilling) {
+                    continue;
+                }
+                return {Result::UseCard{it}};
+            }
+        }
+        return {};
+    }
+    auto inKilling(Player &, Game &) -> Result override {
+        return abandonFirst(CardLabel::D_Dodge);
+    }
+    auto inAoe(Player &, Game &, CardLabel type) -> Result override {
+        return abandonFirst(type);
+    }
+    auto inBlockingTrick(Player &, Player &target, Game &, bool friendly) -> Result override {
+        auto flag = (
+            (friendly and canProvoke(target.impression)) or
+            (not friendly and canFlatter(target.impression))
+        );
+
+        if (flag) return {abandonFirst(CardLabel::J_Unbreakable)};
+        return {};
+    }
+};
+
+auto createDesignant(Player *player) -> std::unique_ptr<IDesignant> {
+    return std::make_unique<DefaultDesignant>(player);
 }
 }
